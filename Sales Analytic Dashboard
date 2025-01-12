@@ -1,1 +1,144 @@
+import pandas as pd
+from sqlalchemy import create_engine
+
+# STEP 1: DATABASE CONNECTION (MySQL)
+# For MySQL
+# Replace `username`, `password`, `host`, and `database_name` with your credentials
+# engine = create_engine('mysql+pymysql://username:password@host/database_name')
+
+engine = create_engine('sqlite:///coworkzen_reports.db')
+
+# STEP 2: CREATE TABLES
+def create_tables(engine):
+    with engine.connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS Clients (
+            client_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            phone TEXT,
+            signup_date DATE,
+            source TEXT,
+            industry TEXT
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS Memberships (
+            membership_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER,
+            membership_type TEXT,
+            start_date DATE,
+            end_date DATE,
+            price_per_month REAL,
+            FOREIGN KEY (client_id) REFERENCES Clients(client_id)
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS Spaces (
+            space_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            space_name TEXT,
+            space_type TEXT,
+            capacity INTEGER,
+            price_per_hour REAL,
+            location TEXT
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS Bookings (
+            booking_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER,
+            space_id INTEGER,
+            booking_date DATE,
+            start_time TEXT,
+            end_time TEXT,
+            revenue REAL,
+            FOREIGN KEY (client_id) REFERENCES Clients(client_id),
+            FOREIGN KEY (space_id) REFERENCES Spaces(space_id)
+        );
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS Payments (
+            payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER,
+            payment_date DATE,
+            amount REAL,
+            payment_method TEXT,
+            invoice_id TEXT,
+            FOREIGN KEY (client_id) REFERENCES Clients(client_id)
+        );
+        """)
+    print("Tables created successfully!")
+
+# STEP 3: INSERT SAMPLE DATA
+def insert_sample_data(engine):
+    with engine.connect() as conn:
+        conn.execute("""
+        INSERT INTO Clients (name, email, phone, signup_date, source, industry)
+        VALUES 
+            ('Ashish', 'ashish@example.com', '1234567890', '2024-07-15', 'Social Media', 'IT Services'),
+            ('Neelam gupta', 'neelam@gmail.com', '9876543210', '2024-08-10', 'Referral', 'Finance');
+        """)
+        conn.execute("""
+        INSERT INTO Memberships (client_id, membership_type, start_date, end_date, price_per_month)
+        VALUES 
+            (1, 'Hot Desk', '2024-01-16', '2024-12-31', 200),
+            (2, 'Private Office', '2024-02-15', '2024-08-15', 1500);
+        """)
+        conn.execute("""
+        INSERT INTO Spaces (space_name, space_type, capacity, price_per_day, location)
+        VALUES 
+            ('Hot Desk Area', 'Open dedicated seats', 10, 269, 'Noida'),
+            ('Meeting Room A', 'Meeting Room', 8, 300, 'Noida'),
+            ('Private Office 1', 'Private Office', 4, NULL, 'Noida');
+        """)
+        conn.execute("""
+        INSERT INTO Bookings (client_id, space_id, booking_date, start_time, end_time, revenue)
+        VALUES 
+            (1, 1, '2024-03-01', '10:00', '12:00', 50),
+            (2, 2, '2024-03-05', '14:00', '16:00', 300);
+        """)
+        conn.execute("""
+        INSERT INTO Payments (client_id, payment_date, amount, payment_method, invoice_id)
+        VALUES 
+            (1, '2024-03-01', 200, 'Credit Card', 'INV-001'),
+            (2, '2024-03-15', 300, 'Bank Transfer', 'INV-002');
+        """)
+    print("Data inserted successfully!")
+
+# STEP 4: ANALYTICS
+def generate_analytics(engine):
+    # SQL queries to fetch data
+    query_revenue = """
+    SELECT 
+        strftime('%Y-%m', booking_date) AS month,
+        SUM(revenue) AS total_revenue
+    FROM Bookings
+    GROUP BY month
+    ORDER BY month;
+    """
+    query_occupancy = """
+    SELECT 
+        space_name,
+        ROUND(SUM(CAST(strftime('%D', end_time) AS INTEGER) - CAST(strftime('%D', start_time) AS INTEGER)) / 
+        (capacity * 30) * 100, 2) AS occupancy_rate
+    FROM Bookings
+    JOIN Spaces ON Bookings.space_id = Spaces.space_id
+    GROUP BY space_name;
+    """
+    
+    # Fetch data using pandas
+    df_revenue = pd.read_sql(query_revenue, engine)
+    df_occupancy = pd.read_sql(query_occupancy, engine)
+
+    # Save to Excel
+    with pd.ExcelWriter("coworking_sales_dashboard.xlsx") as writer:
+        df_revenue.to_excel(writer, sheet_name="Revenue Trends", index=False)
+        df_occupancy.to_excel(writer, sheet_name="Occupancy Rates", index=False)
+    print("Analytics exported to 'coworking_sales_dashboard.xlsx'")
+
+# RUN THE FULL PIPELINE
+if __name__ == "__main__":
+    create_tables(engine)
+    insert_sample_data(engine)
+    generate_analytics(engine)
 
