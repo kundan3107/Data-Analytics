@@ -1,0 +1,84 @@
+import sqlite3
+import pandas as pd
+from datetime import datetime
+import openpyxl
+
+# Step 1: Database Setup
+class EmployeePerformanceTracker:
+    def __init__(self, db_name="employee_performance.db"):
+        self.conn = sqlite3.connect(db_name)
+        self.cursor = self.conn.cursor()
+        self.create_tables()
+
+    def create_tables(self):
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            department TEXT NOT NULL
+        )
+        """)
+        
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS performance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER,
+            date TEXT NOT NULL,
+            hours_worked INTEGER NOT NULL,
+            performance_score INTEGER NOT NULL,
+            FOREIGN KEY(employee_id) REFERENCES employees(id)
+        )
+        """)
+        
+        self.conn.commit()
+
+    def add_employee(self, name, department):
+        self.cursor.execute("INSERT INTO employees (name, department) VALUES (?, ?)", (name, department))
+        self.conn.commit()
+
+    def log_performance(self, employee_id, date, hours_worked, performance_score):
+        self.cursor.execute(
+            "INSERT INTO performance (employee_id, date, hours_worked, performance_score) VALUES (?, ?, ?, ?)",
+            (employee_id, date, hours_worked, performance_score)
+        )
+        self.conn.commit()
+
+    def generate_report(self, start_date, end_date, output_file="performance_report.xlsx"):
+        query = """
+        SELECT e.name, e.department, p.date, p.hours_worked, p.performance_score
+        FROM performance p
+        INNER JOIN employees e ON e.id = p.employee_id
+        WHERE date BETWEEN ? AND ?
+        """
+        
+        self.cursor.execute(query, (start_date, end_date))
+        data = self.cursor.fetchall()
+        
+        df = pd.DataFrame(data, columns=["Name", "Department", "Date", "Hours Worked", "Performance Score"])
+        
+        # Writing data to Excel
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name="Performance Report")
+
+        print(f"Report generated: {output_file}")
+
+    def close(self):
+        self.conn.close()
+
+# Step 2: Usage
+if __name__ == "__main__":
+    tracker = EmployeePerformanceTracker()
+
+    # Adding employees
+    tracker.add_employee("Alice", "Engineering")
+    tracker.add_employee("Bob", "Marketing")
+
+    # Logging performance
+    tracker.log_performance(1, "2025-01-01", 8, 90)
+    tracker.log_performance(1, "2025-01-02", 9, 85)
+    tracker.log_performance(2, "2025-01-01", 7, 80)
+
+    # Generating report
+    tracker.generate_report("2025-01-01", "2025-01-02")
+
+    tracker.close()
