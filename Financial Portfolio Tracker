@@ -1,0 +1,116 @@
+# Financial Portfolio Tracker
+# Technologies Used: Python, SQL, Excel
+
+import sqlite3
+import pandas as pd
+import openpyxl
+from datetime import datetime
+
+# Database Setup
+def setup_database():
+    connection = sqlite3.connect("portfolio_tracker.db")
+    cursor = connection.cursor()
+
+    # Create a table for portfolio holdings
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS holdings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            quantity REAL NOT NULL,
+            purchase_price REAL NOT NULL,
+            purchase_date TEXT NOT NULL
+        )
+    ''')
+
+    # Create a table for transactions
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            transaction_type TEXT CHECK(transaction_type IN ('BUY', 'SELL')) NOT NULL,
+            quantity REAL NOT NULL,
+            price REAL NOT NULL,
+            transaction_date TEXT NOT NULL
+        )
+    ''')
+
+    connection.commit()
+    connection.close()
+
+# Function to Add a New Holding
+def add_holding(ticker, quantity, purchase_price):
+    connection = sqlite3.connect("portfolio_tracker.db")
+    cursor = connection.cursor()
+    
+    purchase_date = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute('''
+        INSERT INTO holdings (ticker, quantity, purchase_price, purchase_date)
+        VALUES (?, ?, ?, ?)
+    ''', (ticker, quantity, purchase_price, purchase_date))
+
+    connection.commit()
+    connection.close()
+
+# Function to Record a Transaction
+def record_transaction(ticker, transaction_type, quantity, price):
+    connection = sqlite3.connect("portfolio_tracker.db")
+    cursor = connection.cursor()
+
+    transaction_date = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute('''
+        INSERT INTO transactions (ticker, transaction_type, quantity, price, transaction_date)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (ticker, transaction_type, quantity, price, transaction_date))
+
+    connection.commit()
+    connection.close()
+
+# Function to Export Portfolio Data to Excel
+def export_to_excel():
+    connection = sqlite3.connect("portfolio_tracker.db")
+
+    # Export Holdings
+    holdings_df = pd.read_sql_query("SELECT * FROM holdings", connection)
+    transactions_df = pd.read_sql_query("SELECT * FROM transactions", connection)
+
+    # Create an Excel writer
+    with pd.ExcelWriter("portfolio_report.xlsx", engine="openpyxl") as writer:
+        holdings_df.to_excel(writer, sheet_name="Holdings", index=False)
+        transactions_df.to_excel(writer, sheet_name="Transactions", index=False)
+
+    connection.close()
+
+# Function to Calculate Portfolio Value
+def calculate_portfolio_value(prices):
+    connection = sqlite3.connect("portfolio_tracker.db")
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT ticker, quantity, purchase_price FROM holdings")
+    holdings = cursor.fetchall()
+
+    total_value = 0
+    for ticker, quantity, _ in holdings:
+        if ticker in prices:
+            total_value += quantity * prices[ticker]
+
+    connection.close()
+    return total_value
+
+# Main Script
+if __name__ == "__main__":
+    setup_database()
+
+    # Add some sample data
+    add_holding("AAPL", 10, 150)
+    add_holding("TSLA", 5, 700)
+
+    record_transaction("AAPL", "BUY", 10, 150)
+    record_transaction("TSLA", "BUY", 5, 700)
+
+    # Export data to Excel
+    export_to_excel()
+
+    # Calculate portfolio value (sample stock prices)
+    sample_prices = {"AAPL": 170, "TSLA": 750}
+    total_value = calculate_portfolio_value(sample_prices)
+    print(f"Total Portfolio Value: ${total_value:.2f}")
